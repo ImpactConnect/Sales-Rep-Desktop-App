@@ -57,11 +57,13 @@ class SalesService {
         'vat': sale.vat,
         'total_amount': sale.totalAmount,
         'created_at': DateTime.now().toIso8601String(),
-        'items': sale.items.map((item) => {
-          'product_id': item.productId,
-          'quantity': item.quantity,
-          'unit_price': item.unitPrice,
-        }).toList(),
+        'items': sale.items
+            .map((item) => {
+                  'product_id': item.productId,
+                  'quantity': item.quantity,
+                  'unit_price': item.unitPrice,
+                })
+            .toList(),
       };
 
       // Start a transaction
@@ -108,13 +110,16 @@ class SalesService {
     String? repId,
     String? customerId,
   }) async {
-    List<Sale> sales = await _salesDbService.getSalesByDateRange(startDate, endDate);
-    
+    List<Sale> sales =
+        await _salesDbService.getSalesByDateRange(startDate, endDate);
+
     if (productId != null) {
-      sales = sales.where((sale) =>
-        sale.items.any((item) => item.productId == productId)).toList();
+      sales = sales
+          .where(
+              (sale) => sale.items.any((item) => item.productId == productId))
+          .toList();
     }
-    
+
     if (repId != null) {
       sales = sales.where((sale) => sale.repId == repId).toList();
     }
@@ -122,7 +127,7 @@ class SalesService {
     if (customerId != null) {
       sales = sales.where((sale) => sale.customerId == customerId).toList();
     }
-    
+
     return sales;
   }
 
@@ -136,7 +141,7 @@ class SalesService {
 
   Future<void> syncUnsynced() async {
     final unsyncedSales = await _salesDbService.getUnsyncedSales();
-    
+
     for (final sale in unsyncedSales) {
       try {
         final saleData = sale.toMap();

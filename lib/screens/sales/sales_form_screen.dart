@@ -29,7 +29,7 @@ class _SalesFormScreenState extends State<SalesFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _customerFormKey = GlobalKey<FormState>();
   final List<Map<String, dynamic>> _saleItems = [];
-  
+
   String? _customerName;
   String? _customerPhone;
   double _totalAmount = 0;
@@ -115,12 +115,12 @@ class _SalesFormScreenState extends State<SalesFormScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_customerName != null) ...[              
-                Text('Customer: $_customerName',
+              if (_customerName != null) ...[
+                Text(
+                  'Customer: $_customerName',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                if (_customerPhone != null)
-                  Text('Phone: $_customerPhone'),
+                if (_customerPhone != null) Text('Phone: $_customerPhone'),
                 const SizedBox(height: 16),
               ],
               Text('Items:', style: Theme.of(context).textTheme.titleMedium),
@@ -157,8 +157,10 @@ class _SalesFormScreenState extends State<SalesFormScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Total:', style: Theme.of(context).textTheme.titleMedium),
-                  Text(_currencyFormat.format(_totalAmount),
+                  Text('Total:',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    _currencyFormat.format(_totalAmount),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ],
@@ -229,7 +231,8 @@ class _SalesFormScreenState extends State<SalesFormScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Print Receipt'),
-          content: const Text('Would you like to print a receipt for this sale?'),
+          content:
+              const Text('Would you like to print a receipt for this sale?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -308,7 +311,8 @@ class _SalesFormScreenState extends State<SalesFormScreen> {
             Expanded(
               flex: 2,
               child: FutureBuilder<List<StockItem>>(
-                future: _stockService.getStockItems(outletId: _userProfile?.outletId),
+                future: _stockService.getStockItems(
+                    outletId: _userProfile?.outletId),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const CircularProgressIndicator();
@@ -380,7 +384,8 @@ class _SalesFormScreenState extends State<SalesFormScreen> {
             ),
             IconButton(
               icon: const Icon(Icons.remove_circle_outline),
-              onPressed: _saleItems.length > 1 ? () => _removeSaleItem(index) : null,
+              onPressed:
+                  _saleItems.length > 1 ? () => _removeSaleItem(index) : null,
             ),
           ],
         ),
@@ -403,12 +408,12 @@ class _SalesFormScreenState extends State<SalesFormScreen> {
       ITEMS
       -----
       ${sale.items.map((item) {
-        final product = _saleItems.firstWhere(
-          (saleItem) => saleItem['product'].id == item.productId,
-          orElse: () => {'product': null},
-        )['product'];
-        return '${product?.productName ?? 'Unknown'} ${item.quantity}x${_currencyFormat.format(item.unitPrice)} = ${_currencyFormat.format(item.total)}';
-      }).join('\n      ')}
+      final product = _saleItems.firstWhere(
+        (saleItem) => saleItem['product'].id == item.productId,
+        orElse: () => {'product': null},
+      )['product'];
+      return '${product?.productName ?? 'Unknown'} ${item.quantity}x${_currencyFormat.format(item.unitPrice)} = ${_currencyFormat.format(item.total)}';
+    }).join('\n      ')}
       
       =====================
       Subtotal: ${_currencyFormat.format(_totalAmount - _vat)}
@@ -418,7 +423,7 @@ class _SalesFormScreenState extends State<SalesFormScreen> {
       Thank you for your business!
       =====================
     ''';
-    
+
     print(receipt); // For testing purposes
   }
 

@@ -49,7 +49,7 @@ class SalesDbService {
   Future<List<Sale>> getAllSales() async {
     final db = await _databaseService.database;
     final List<Map<String, dynamic>> saleMaps = await db.query(AppTables.sales);
-    
+
     List<Sale> sales = [];
     for (var saleMap in saleMaps) {
       final List<Map<String, dynamic>> itemMaps = await db.query(
@@ -57,7 +57,7 @@ class SalesDbService {
         where: 'sale_id = ?',
         whereArgs: [saleMap['id']],
       );
-      
+
       final items = itemMaps.map((item) => SaleItem.fromMap(item)).toList();
       sales.add(Sale.fromMap({...saleMap, 'items': items}));
     }
@@ -71,7 +71,7 @@ class SalesDbService {
       where: 'synced = ?',
       whereArgs: [0],
     );
-    
+
     List<Sale> sales = [];
     for (var saleMap in saleMaps) {
       final List<Map<String, dynamic>> itemMaps = await db.query(
@@ -79,7 +79,7 @@ class SalesDbService {
         where: 'sale_id = ?',
         whereArgs: [saleMap['id']],
       );
-      
+
       final items = itemMaps.map((item) => SaleItem.fromMap(item)).toList();
       sales.add(Sale.fromMap({...saleMap, 'items': items}));
     }
@@ -103,7 +103,7 @@ class SalesDbService {
       where: 'created_at BETWEEN ? AND ?',
       whereArgs: [start.toIso8601String(), end.toIso8601String()],
     );
-    
+
     List<Sale> sales = [];
     for (var saleMap in saleMaps) {
       final List<Map<String, dynamic>> itemMaps = await db.query(
@@ -111,7 +111,7 @@ class SalesDbService {
         where: 'sale_id = ?',
         whereArgs: [saleMap['id']],
       );
-      
+
       final items = itemMaps.map((item) => SaleItem.fromMap(item)).toList();
       sales.add(Sale.fromMap({...saleMap, 'items': items}));
     }
@@ -125,9 +125,10 @@ class SalesDbService {
       where: 'product_id = ?',
       whereArgs: [productId],
     );
-    
-    final saleIds = saleItemMaps.map((item) => item['sale_id'] as String).toSet();
-    
+
+    final saleIds =
+        saleItemMaps.map((item) => item['sale_id'] as String).toSet();
+
     List<Sale> sales = [];
     for (var saleId in saleIds) {
       final List<Map<String, dynamic>> saleMaps = await db.query(
@@ -135,7 +136,7 @@ class SalesDbService {
         where: 'id = ?',
         whereArgs: [saleId],
       );
-      
+
       if (saleMaps.isNotEmpty) {
         final saleMap = saleMaps.first;
         final List<Map<String, dynamic>> itemMaps = await db.query(
@@ -143,7 +144,7 @@ class SalesDbService {
           where: 'sale_id = ?',
           whereArgs: [saleId],
         );
-        
+
         final items = itemMaps.map((item) => SaleItem.fromMap(item)).toList();
         sales.add(Sale.fromMap({...saleMap, 'items': items}));
       }
@@ -158,7 +159,7 @@ class SalesDbService {
       where: 'outlet_id = ?',
       whereArgs: [outletId],
     );
-    
+
     List<Sale> sales = [];
     for (var saleMap in saleMaps) {
       final List<Map<String, dynamic>> itemMaps = await db.query(
@@ -166,7 +167,7 @@ class SalesDbService {
         where: 'sale_id = ?',
         whereArgs: [saleMap['id']],
       );
-      
+
       final items = itemMaps.map((item) => SaleItem.fromMap(item)).toList();
       sales.add(Sale.fromMap({...saleMap, 'items': items}));
     }

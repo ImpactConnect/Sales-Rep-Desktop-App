@@ -95,17 +95,18 @@ class _StockScreenState extends State<StockScreen> {
             Text('Quantity: ${item.quantity} ${item.unit}'),
             const SizedBox(height: 8),
             Text('Cost per unit: \$${item.costPerUnit.toStringAsFixed(2)}'),
-                  if (!item.synced)
-                    Row(
-                      children: [
-                        const Icon(Icons.sync_problem, size: 16, color: Colors.orange),
-                        const SizedBox(width: 4),
-                        const Text(
-                          'Not Synced',
-                          style: TextStyle(color: Colors.orange),
-                        ),
-                      ],
-                    ),
+            if (!item.synced)
+              Row(
+                children: [
+                  const Icon(Icons.sync_problem,
+                      size: 16, color: Colors.orange),
+                  const SizedBox(width: 4),
+                  const Text(
+                    'Not Synced',
+                    style: TextStyle(color: Colors.orange),
+                  ),
+                ],
+              ),
             const SizedBox(height: 8),
             Text(
                 'Total Value: \$${(item.quantity * item.costPerUnit).toStringAsFixed(2)}'),
@@ -135,16 +136,22 @@ class _StockScreenState extends State<StockScreen> {
       final now = DateTime.now();
       switch (_selectedDateFilter) {
         case 'Today':
-          filtered = filtered.where((item) => item.dateAdded.isAfter(
-              DateTime(now.year, now.month, now.day))).toList();
+          filtered = filtered
+              .where((item) => item.dateAdded
+                  .isAfter(DateTime(now.year, now.month, now.day)))
+              .toList();
           break;
         case 'Last 7 Days':
-          filtered = filtered.where((item) => item.dateAdded.isAfter(
-              now.subtract(const Duration(days: 7)))).toList();
+          filtered = filtered
+              .where((item) =>
+                  item.dateAdded.isAfter(now.subtract(const Duration(days: 7))))
+              .toList();
           break;
         case 'Last 30 Days':
-          filtered = filtered.where((item) => item.dateAdded.isAfter(
-              now.subtract(const Duration(days: 30)))).toList();
+          filtered = filtered
+              .where((item) => item.dateAdded
+                  .isAfter(now.subtract(const Duration(days: 30))))
+              .toList();
           break;
       }
     }
@@ -154,8 +161,10 @@ class _StockScreenState extends State<StockScreen> {
     }
 
     if (_showLowStock) {
-      filtered = filtered.where((item) => item.quantity > 0 && 
-          item.quantity <= _lowStockThreshold).toList();
+      filtered = filtered
+          .where((item) =>
+              item.quantity > 0 && item.quantity <= _lowStockThreshold)
+          .toList();
     }
 
     setState(() {
@@ -165,12 +174,16 @@ class _StockScreenState extends State<StockScreen> {
 
   Widget _buildMetricsBar() {
     final totalProducts = _stockItems.length;
-    final totalQuantity = _stockItems.fold<double>(0, (sum, item) => sum + item.quantity);
-    final totalValue = _stockItems.fold<double>(0, 
-        (sum, item) => sum + (item.quantity * item.costPerUnit));
-    final lowStockCount = _stockItems.where(
-        (item) => item.quantity > 0 && item.quantity <= _lowStockThreshold).length;
-    final outOfStockCount = _stockItems.where((item) => item.quantity == 0).length;
+    final totalQuantity =
+        _stockItems.fold<double>(0, (sum, item) => sum + item.quantity);
+    final totalValue = _stockItems.fold<double>(
+        0, (sum, item) => sum + (item.quantity * item.costPerUnit));
+    final lowStockCount = _stockItems
+        .where(
+            (item) => item.quantity > 0 && item.quantity <= _lowStockThreshold)
+        .length;
+    final outOfStockCount =
+        _stockItems.where((item) => item.quantity == 0).length;
 
     return Container(
       padding: const EdgeInsets.all(16.0),
@@ -181,8 +194,10 @@ class _StockScreenState extends State<StockScreen> {
           _buildMetricCard('Total Products', totalProducts.toString()),
           _buildMetricCard('Total Quantity', totalQuantity.toStringAsFixed(2)),
           _buildMetricCard('Total Value', '\$${totalValue.toStringAsFixed(2)}'),
-          _buildMetricCard('Low Stock', lowStockCount.toString(), color: Colors.orange),
-          _buildMetricCard('Out of Stock', outOfStockCount.toString(), color: Colors.red),
+          _buildMetricCard('Low Stock', lowStockCount.toString(),
+              color: Colors.orange),
+          _buildMetricCard('Out of Stock', outOfStockCount.toString(),
+              color: Colors.red),
         ],
       ),
     );
@@ -375,12 +390,7 @@ class _StockScreenState extends State<StockScreen> {
                 DropdownButton<String>(
                   value: _selectedDateFilter,
                   isExpanded: true,
-                  items: [
-                    'All',
-                    'Today',
-                    'Last 7 Days',
-                    'Last 30 Days'
-                  ]
+                  items: ['All', 'Today', 'Last 7 Days', 'Last 30 Days']
                       .map((filter) => DropdownMenuItem(
                             value: filter,
                             child: Text(filter),

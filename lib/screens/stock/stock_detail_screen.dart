@@ -128,8 +128,12 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                           '\$${_stockItem!.costPerUnit.toStringAsFixed(2)}'),
                       _buildInfoRow('Total Value',
                           '\$${(_stockItem!.quantity * _stockItem!.costPerUnit).toStringAsFixed(2)}'),
-                      _buildInfoRow('Added on',
-                          _stockItem!.dateAdded.toLocal().toString().split('.')[0]),
+                      _buildInfoRow(
+                          'Added on',
+                          _stockItem!.dateAdded
+                              .toLocal()
+                              .toString()
+                              .split('.')[0]),
                       if (_stockItem!.lastUpdated != null)
                         _buildInfoRow(
                             'Last Updated',
@@ -142,10 +146,13 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                       _buildInfoRow(
                         'Sync Status',
                         _stockItem!.synced ? 'Synced' : 'Not Synced',
-                        valueColor: _stockItem!.synced ? Colors.green : Colors.orange,
+                        valueColor:
+                            _stockItem!.synced ? Colors.green : Colors.orange,
                         icon: _stockItem!.synced
-                            ? const Icon(Icons.check_circle, color: Colors.green, size: 16)
-                            : const Icon(Icons.sync_problem, color: Colors.orange, size: 16),
+                            ? const Icon(Icons.check_circle,
+                                color: Colors.green, size: 16)
+                            : const Icon(Icons.sync_problem,
+                                color: Colors.orange, size: 16),
                       ),
                       if (!_stockItem!.synced && _stockItem!.syncError != null)
                         _buildInfoRow('Sync Error', _stockItem!.syncError!,
@@ -179,7 +186,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     return 'Well Stocked';
   }
 
-  Widget _buildInfoRow(String label, String value, {Color? valueColor, Widget? icon}) {
+  Widget _buildInfoRow(String label, String value,
+      {Color? valueColor, Widget? icon}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(

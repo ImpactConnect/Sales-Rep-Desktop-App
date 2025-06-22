@@ -51,24 +51,24 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF9FC),
+      backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
         title: const Text(
           'Sales History',
           style: TextStyle(
-            color: Color(0xFF333333),
-            fontWeight: FontWeight.w600,
+            color: Color(0xFF1F1F1F),
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
           ),
         ),
         backgroundColor: Colors.white,
-        elevation: 0,
+        elevation: 1,
+        shadowColor: Colors.black12,
       ),
-      body: SalesListScreen(onRefresh: _refreshData),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SalesListScreen(onRefresh: _refreshData),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           showModalBottomSheet(
@@ -78,25 +78,24 @@ class _SalesScreenState extends State<SalesScreen> {
             builder: (context) => Container(
               decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
               child: DraggableScrollableSheet(
                 initialChildSize: 0.9,
-                minChildSize: 0.5,
+                minChildSize: 0.6,
                 maxChildSize: 0.95,
                 expand: false,
                 builder: (context, scrollController) => SingleChildScrollView(
                   controller: scrollController,
-                  child: SalesFormScreen(onSaleComplete: () {
-                    Navigator.pop(context);
-                    _refreshData();
-                  }),
+                  child: SalesFormScreen(
+                    onSaleComplete: () {
+                      Navigator.pop(context);
+                      _refreshData();
+                    },
+                  ),
                 ),
               ),
             ),

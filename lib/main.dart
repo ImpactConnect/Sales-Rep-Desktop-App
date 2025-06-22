@@ -52,7 +52,8 @@ class MyApp extends StatelessWidget {
     final salesDbService = SalesDbService(databaseService);
     final outletService = OutletService();
     final supabaseClient = Supabase.instance.client;
-    final salesService = SalesService(salesDbService, supabaseClient, stockService);
+    final salesService =
+        SalesService(salesDbService, supabaseClient, stockService);
 
     return provider.MultiProvider(
       providers: [
@@ -63,29 +64,29 @@ class MyApp extends StatelessWidget {
         provider.Provider<OutletService>(create: (_) => outletService),
       ],
       child: MaterialApp(
-      title: AppConfig.appName,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
+        title: AppConfig.appName,
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+          useMaterial3: true,
+        ),
+        initialRoute: AppRoutes.splash,
+        routes: {
+          AppRoutes.splash: (context) => const SplashScreen(),
+          AppRoutes.login: (context) => const LoginScreen(),
+          AppRoutes.dashboard: (context) => DashboardScreen(),
+          AppRoutes.stock: (context) => const StockScreen(),
+          AppRoutes.sales: (context) => const SalesScreen(),
+        },
+        onGenerateRoute: (settings) {
+          if (settings.name == AppRoutes.stockDetail) {
+            final String stockId = settings.arguments as String;
+            return MaterialPageRoute(
+              builder: (context) => StockDetailScreen(stockId: stockId),
+            );
+          }
+          return null;
+        },
       ),
-      initialRoute: AppRoutes.splash,
-      routes: {
-        AppRoutes.splash: (context) => const SplashScreen(),
-        AppRoutes.login: (context) => const LoginScreen(),
-        AppRoutes.dashboard: (context) => DashboardScreen(),
-        AppRoutes.stock: (context) => const StockScreen(),
-        AppRoutes.sales: (context) => const SalesScreen(),
-      },
-      onGenerateRoute: (settings) {
-        if (settings.name == AppRoutes.stockDetail) {
-          final String stockId = settings.arguments as String;
-          return MaterialPageRoute(
-            builder: (context) => StockDetailScreen(stockId: stockId),
-          );
-        }
-        return null;
-      },
-    ),
     );
   }
 }

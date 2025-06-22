@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart' as provider_pkg;
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
+import '../../../models/sale_model.dart';
+import '../../../models/sale_item_model.dart';
+import '../../../models/stock_model.dart';
 import '../../core/services/sales_service.dart';
 import '../../core/services/stock_service.dart';
 import '../../core/services/auth_service.dart';
-import '../../models/sale_model.dart';
-import '../../models/stock_model.dart';
-import '../../models/user_profile.dart';
-import '../../models/customer_model.dart';
 
 class SalesListScreen extends StatefulWidget {
-  final Function? onRefresh;
+  static const String routeName = '/sales';
+
+  final Future<void> Function()? onRefresh;
 
   const SalesListScreen({Key? key, this.onRefresh}) : super(key: key);
 
@@ -20,191 +20,246 @@ class SalesListScreen extends StatefulWidget {
 }
 
 class _SalesListScreenState extends State<SalesListScreen> {
-  late final SalesService _salesService;
-  late final StockService _stockService;
-  late final AuthService _authService;
-  late String _currentOutletId;
-  final _supabaseClient = Supabase.instance.client;
+  late SalesService _salesService;
+  late StockService _stockService;
+  late AuthService _authService;
 
-  DateTime _startDate = DateTime.now().subtract(const Duration(days: 7));
-  DateTime _endDate = DateTime.now();
-  StockItem? _selectedProduct;
-  String? _selectedCustomerId;
-  bool _isLoading = false;
-  bool _isSyncing = false;
+  bool _isLoading = true;
+  List<Sale> _sales = [];
 
   final _currencyFormat = NumberFormat.currency(locale: 'en_NG', symbol: '₦');
+  final _dateFormat = DateFormat('MMM dd, yyyy – hh:mm a');
+
+  String _formatNumber(num value) {
+    return _currencyFormat.format(value);
+  }
+
+  String _formatDate(DateTime date) {
+    return _dateFormat.format(date);
+  }
 
   @override
   void initState() {
     super.initState();
-    _salesService = provider_pkg.Provider.of<SalesService>(context, listen: false);
-    _stockService = provider_pkg.Provider.of<StockService>(context, listen: false);
-    _authService = provider_pkg.Provider.of<AuthService>(context, listen: false);
-    _initializeOutletId();
+    _salesService = Provider.of<SalesService>(context, listen: false);
+    _stockService = Provider.of<StockService>(context, listen: false);
+    _authService = Provider.of<AuthService>(context, listen: false);
+    _loadSales();
   }
 
-  Future<void> _initializeOutletId() async {
+  Future<void> _loadSales() async {
+    setState(() => _isLoading = true);
     try {
-      final userProfile = await _authService.getCurrentUserProfile();
-      if (userProfile.outletId == null) {
-        throw Exception('User is not assigned to any outlet');
-      }
-      setState(() {
-        _currentOutletId = userProfile.outletId!;
-      });
+      final sales = await _salesService.getAllSales();
+      setState(() => _sales = sales.cast<Sale>());
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
-    }
-  }
-
-  Future<void> _syncSales() async {
-    setState(() => _isSyncing = true);
-    try {
-      await _salesService.syncUnsynced();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sales synced successfully')),
-      );
-      widget.onRefresh?.call();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error syncing sales: $e')),
+        SnackBar(content: Text('Error loading sales: $e')),
       );
     } finally {
-      setState(() => _isSyncing = false);
+      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _selectDateRange() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
-    );
-
-    if (picked != null) {
-      setState(() {
-        _startDate = picked.start;
-        _endDate = picked.end;
-      });
-    }
-  }
-
-  String? _selectedDatePreset;
-  String? _selectedSalesRep;
-
-  List<String> _datePresets = ['Yesterday', 'Last 7 Days', 'Last 30 Days', 'Custom'];
-
-  void _applyDatePreset(String? preset) {
-    if (preset == null) return;
-    
-    setState(() {
-      _selectedDatePreset = preset;
-      switch (preset) {
-        case 'Yesterday':
-          _startDate = DateTime.now().subtract(const Duration(days: 1));
-          _endDate = DateTime.now();
-          break;
-        case 'Last 7 Days':
-          _startDate = DateTime.now().subtract(const Duration(days: 7));
-          _endDate = DateTime.now();
-          break;
-        case 'Last 30 Days':
-          _startDate = DateTime.now().subtract(const Duration(days: 30));
-          _endDate = DateTime.now();
-          break;
-        case 'Custom':
-          _selectDateRange();
-          break;
-      }
-    });
-  }
-
-  Widget _buildMetricsCard(List<Sale> sales) {
-    double totalSales = sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
-    int totalItems = sales.fold(0, (sum, sale) => sum + sale.items.length);
-    int totalSalesCount = sales.length;
-    Set<String?> uniqueCustomers = sales.map((sale) => sale.customerId).toSet();
+  Widget _buildMetricsCard() {
+    final int salesCount = _sales.length;
+    final int totalCustomers =
+        _sales.where((s) => s.customerName?.isNotEmpty ?? false).length;
+    final int totalItemsSold =
+        _sales.fold<int>(0, (sum, sale) => sum + (sale as Sale).totalQuantity);
+    final double totalRevenue =
+        _sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
 
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+      ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          Expanded(
-            child: _buildMetricTile(
-              'Total Items Sold',
-              totalItems,
-              icon: Icons.inventory,
-              isAmount: false,
-              backgroundColor: const Color(0xFFF5F5F5),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildMetricTile(
-              'Sales Count',
-              totalSalesCount,
-              icon: Icons.receipt_long,
-              isAmount: false,
-              backgroundColor: const Color(0xFFF5F5F5),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildMetricTile(
-              'Total Customers',
-              uniqueCustomers.length,
-              icon: Icons.people,
-              isAmount: false,
-              backgroundColor: const Color(0xFFF5F5F5),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildMetricTile(
-              'Total Revenue',
-              totalSales,
-              icon: Icons.money,
-              backgroundColor: const Color(0xFFF5F5F5),
-            ),
-          ),
+          _buildMetric('Sales', salesCount.toString()),
+          _buildMetric('Customers', totalCustomers.toString()),
+          _buildMetric('Items', totalItemsSold.toString()),
+          _buildMetric('Revenue', _currencyFormat.format(totalRevenue)),
         ],
       ),
     );
   }
 
-  Widget _buildMetricTile(String label, dynamic value, {bool isAmount = true, IconData? icon, Color? backgroundColor}) {
+  Widget _buildMetric(String label, String value) {
+    return Column(
+      children: [
+        Text(value,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
+    );
+  }
+
+  Widget _buildSaleDetailsDialog(Sale sale) {
+    return AlertDialog(
+      title: const Text('Sale Details'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Customer: ${sale.customerName ?? "N/A"}'),
+          Text('Date: ${_formatDate(sale.date)}'),
+          const Divider(),
+          ...sale.items.map((item) => ListTile(
+                title: Text(item.productName ?? 'Unknown Product'),
+                subtitle: Text(
+                    '${item.quantity} × ${_currencyFormat.format(item.unitPrice)}'),
+                trailing: Text(_currencyFormat.format(item.total)),
+              )),
+          const Divider(),
+          Text('VAT: ${_currencyFormat.format(sale.vat)}'),
+          Text('Total: ${_currencyFormat.format(sale.totalAmount)}'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context);
+            // TODO: Add print logic
+          },
+          child: const Text('Print Receipt'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  void _showSaleDetails(Sale sale) {
+    showDialog(
+      context: context,
+      builder: (context) => _buildSaleDetailsDialog(sale),
+    );
+  }
+
+  Widget _buildSalesListHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: Colors.grey[200],
+      child: Row(
+        children: const [
+          Expanded(
+              flex: 2,
+              child:
+                  Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+              flex: 3,
+              child: Text('Customer',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+              flex: 3,
+              child: Text('Product',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+              flex: 2,
+              child: Text('Quantity',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+              flex: 2,
+              child:
+                  Text('VAT', style: TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+              flex: 2,
+              child:
+                  Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSaleItemTile(Sale sale) {
     return Card(
-      elevation: 3.0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-      color: backgroundColor ?? Colors.white,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (icon != null)
-              Icon(icon, size: 24, color: const Color(0xFF4A90E2)),
-            const SizedBox(height: 8),
-            Text(
-              isAmount ? _currencyFormat.format(value) : value.toString(),
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF333333),
+            Expanded(
+              flex: 2,
+              child: Text(_formatDate(sale.date)),
+            ),
+            Expanded(
+              flex: 3,
+              child: Text(sale.customerName ?? 'N/A'),
+            ),
+            Expanded(
+              flex: 8,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: Text('Item',
+                            style: TextStyle(fontWeight: FontWeight.w500)),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text('Qty',
+                            style: TextStyle(fontWeight: FontWeight.w500)),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Text('Total',
+                            style: TextStyle(fontWeight: FontWeight.w500)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  ...sale.items.map((item) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 4,
+                              child: FutureBuilder<StockItem>(
+                                future: StockService()
+                                    .getStockItemById(item.productId),
+                                builder: (context, snapshot) {
+                                  if (snapshot.hasData) {
+                                    return Text(snapshot.data!.productName);
+                                  }
+                                  return const Text('Loading...');
+                                },
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(item.quantity.toString()),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                  '₦${_formatNumber(item.quantity * item.unitPrice)}'),
+                            ),
+                          ],
+                        ),
+                      )),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF666666),
+            Expanded(
+              flex: 2,
+              child: Text('₦${_formatNumber(sale.vatAmount)}'),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                '₦${_formatNumber(sale.totalAmount)}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -212,471 +267,182 @@ class _SalesListScreenState extends State<SalesListScreen> {
     );
   }
 
-  void _showSaleDetails(Sale sale) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(16),
-              topRight: Radius.circular(16),
+  Widget _buildSaleCard(Sale sale) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: ListTile(
+        onTap: () => _showSaleDetails(sale),
+        title: Text(sale.customerName ?? '',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_formatDate(sale.date),
+                style: const TextStyle(color: Colors.grey)),
+            const SizedBox(height: 4),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: sale.items.map((item) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                          child: Text(item.productName ?? 'Unknown Product')),
+                      Text('${item.quantity} × ₦${item.unitPrice}'),
+                      Text(_currencyFormat.format(item.total)),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
-          ),
-          child: DraggableScrollableSheet(
-            initialChildSize: 0.7,
-            maxChildSize: 0.95,
-            minChildSize: 0.5,
-            builder: (context, scrollController) {
-              return Container(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Sale Details',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: const Color(0xFF333333),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.print, color: Color(0xFF4A90E2)),
-                              onPressed: () {
-                                // TODO: Implement print functionality
-                              },
-                              tooltip: 'Print Receipt',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close, color: Color(0xFF666666)),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const Divider(color: Color(0xFFEEEEEE)),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF5F5F5),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Date: ${DateFormat('MMM d, y HH:mm').format(sale.createdAt)}',
-                            style: const TextStyle(color: Color(0xFF666666)),
-                          ),
-                          if (sale.customerId != null)
-                            FutureBuilder<Map<String, dynamic>>(
-                              future: _supabaseClient
-                                  .from('customers')
-                                  .select()
-                                  .eq('id', sale.customerId)
-                                  .single()
-                                  .then((response) => response as Map<String, dynamic>),
-                              builder: (context, snapshot) {
-                                if (snapshot.hasData) {
-                                  final customer = Customer.fromMap(snapshot.data!);
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Customer: ${customer.fullName ?? 'N/A'}',
-                                        style: const TextStyle(color: Color(0xFF666666)),
-                                      ),
-                                      Text(
-                                        'Phone: ${customer.phone ?? 'N/A'}',
-                                        style: const TextStyle(color: Color(0xFF666666)),
-                                      ),
-                                    ],
-                                  );
-                                }
-                                return const SizedBox();
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Items',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF333333),
-                      ),
-                    ),
-                    Expanded(
-                      child: ListView.builder(
-                        controller: scrollController,
-                        itemCount: sale.items.length,
-                        itemBuilder: (context, index) {
-                          final item = sale.items[index];
-                          return FutureBuilder<StockItem>(
-                            future: _stockService.getStockItemById(item.productId),
-                            builder: (context, snapshot) {
-                              final product = snapshot.data;
-                              return Card(
-                                elevation: 0,
-                                margin: const EdgeInsets.symmetric(vertical: 4),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  side: const BorderSide(color: Color(0xFFEEEEEE)),
-                                ),
-                                child: ListTile(
-                                  title: Text(
-                                    product?.productName ?? 'Loading...',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      color: Color(0xFF333333),
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    'Quantity: ${item.quantity} × ${_currencyFormat.format(item.unitPrice)}',
-                                    style: const TextStyle(color: Color(0xFF666666)),
-                                  ),
-                                  trailing: Text(
-                                    _currencyFormat.format(item.total),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF4A90E2),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF5F5F5),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'VAT:',
-                                style: TextStyle(
-                                  color: Color(0xFF666666),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Text(
-                                _currencyFormat.format(sale.vat),
-                                style: const TextStyle(
-                                  color: Color(0xFF666666),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Total:',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF333333),
-                                ),
-                              ),
-                              Text(
-                                _currencyFormat.format(sale.totalAmount),
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF4A90E2),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
+          ],
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              _currencyFormat.format(sale.totalAmount),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 2),
+            const Text("Total"),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.grey[100],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Last Push: ${_dateFormat.format(DateTime.now())}'),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.download),
+                    label: const Text('PDF'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.download),
+                    label: const Text('CSV'),
+                  ),
                 ],
               ),
-            );
-          },
-        );
-      },
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildInfoCard('Pending Push', '0'),
+              const SizedBox(width: 16),
+              _buildInfoCard('Total Pushed', '${_sales.length}'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(String label, String value) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(color: Colors.grey)),
+            const SizedBox(height: 4),
+            Text(value,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterSection() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Search sales...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.filter_list),
+            tooltip: 'Filter',
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        decoration: const InputDecoration(
-                          labelText: 'Date Range',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                        value: _selectedDatePreset,
-                        items: _datePresets.map((preset) => DropdownMenuItem(
-                          value: preset,
-                          child: Text(preset),
-                        )).toList(),
-                        onChanged: _applyDatePreset,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: () => _selectDateRange().then((_) {
-                        setState(() {
-                          _selectedDatePreset = 'Custom';
-                        });
-                      }),
-                      icon: const Icon(Icons.calendar_today),
-                      tooltip: 'Select Date Range',
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: _isSyncing ? null : _syncSales,
-                      icon: _isSyncing
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.sync),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FutureBuilder<List<StockItem>>(
-                        future: _stockService.getStockItems(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) return const SizedBox();
-
-                          return DropdownButtonFormField<StockItem?>(
-                            decoration: const InputDecoration(
-                              labelText: 'Filter by Product',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                            value: _selectedProduct,
-                            items: [
-                              const DropdownMenuItem<StockItem?>(
-                                value: null,
-                                child: Text('All Products'),
-                              ),
-                              ...snapshot.data!.map((item) => DropdownMenuItem(
-                                value: item,
-                                child: Text(item.productName),
-                              )),
-                            ],
-                            onChanged: (value) {
-                              setState(() => _selectedProduct = value);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FutureBuilder<List<UserProfile>>(
-                        future: _authService.getCurrentUserProfile().then((profile) =>
-                          _supabaseClient.from('profiles')
-                            .select()
-                            .eq('outlet_id', profile.outletId)
-                            .then((response) => (response as List)
-                              .map((data) => UserProfile.fromJson(data))
-                              .toList())
-                        ),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) return const SizedBox();
-
-                          return DropdownButtonFormField<String?>(
-                            decoration: const InputDecoration(
-                              labelText: 'Filter by Sales Rep',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                            value: _selectedSalesRep,
-                            items: [
-                              const DropdownMenuItem<String?>(
-                                value: null,
-                                child: Text('All Reps'),
-                              ),
-                              ...snapshot.data!.map((user) => DropdownMenuItem(
-                                value: user.id,
-                                child: Text(user.fullName ?? 'Unknown'),
-                              )),
-                            ],
-                            onChanged: (value) {
-                              setState(() => _selectedSalesRep = value);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<Sale>>(
-              future: _salesService.getFilteredSales(
-                startDate: _startDate,
-                endDate: _endDate,
-                productId: _selectedProduct?.id,
-                repId: _selectedSalesRep,
-                customerId: _selectedCustomerId,
-              ),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-
-                final sales = snapshot.data ?? [];
-
-                if (sales.isEmpty) {
-                  return const Center(child: Text('No sales found'));
-                }
-
-                return ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _buildMetricsCard(sales),
-                    const SizedBox(height: 16),
-                    ...sales.map((sale) => Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: InkWell(
-                        onTap: () => _showSaleDetails(sale),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    DateFormat('MMM d, y HH:mm').format(sale.createdAt),
-                                    style: Theme.of(context).textTheme.bodyMedium,
-                                  ),
-                                  if (!sale.synced)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFF5A623),
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: const Text(
-                                        'Not Synced',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${sale.items.length} items',
-                                        style: Theme.of(context).textTheme.bodyLarge,
-                                      ),
-                                      if (sale.customerId != null)
-                                        FutureBuilder<Map<String, dynamic>>(
-                                          future: _supabaseClient
-                                              .from('customers')
-                                              .select()
-                                              .eq('id', sale.customerId)
-                                              .single()
-                                              .then((response) => response as Map<String, dynamic>),
-                                          builder: (context, snapshot) {
-                                            if (snapshot.hasData) {
-                                              final customer = Customer.fromMap(snapshot.data!);
-                                              return Text(
-                                                customer.fullName ?? 'N/A',
-                                                style: Theme.of(context).textTheme.bodySmall,
-                                              );
-                                            }
-                                            return const SizedBox();
-                                          },
-                                        ),
-                                    ],
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        _currencyFormat.format(sale.totalAmount),
-                                        style: Theme.of(context).textTheme.titleMedium,
-                                      ),
-                                      Text(
-                                        'VAT: ${_currencyFormat.format(sale.vat)}',
-                                        style: Theme.of(context).textTheme.bodySmall,
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Tap to view details',
-                                style: TextStyle(color: Colors.blue),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )),
-                  ],
-                );
-              },
-            ),
+      appBar: AppBar(
+        title: const Text('Sales History'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadSales,
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.pushNamed(context, '/sales/new'),
-        child: const Icon(Icons.add),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildInfoSection(),
+          _buildFilterSection(),
+          _buildMetricsCard(),
+          _buildSalesListHeader(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await _loadSales();
+                if (widget.onRefresh != null) await widget.onRefresh!();
+              },
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView.builder(
+                      itemCount: _sales.length,
+                      itemBuilder: (context, index) =>
+                          _buildSaleItemTile(_sales[index]),
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }
