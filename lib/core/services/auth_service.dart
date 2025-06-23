@@ -52,14 +52,4 @@ class AuthService {
   bool get isAuthenticated => _supabase.auth.currentUser != null;
   Session? get currentSession => _supabase.auth.currentSession;
   User? get currentUser => _supabase.auth.currentUser;
-
-  Future<Map<String, dynamic>> getCurrentLocation() async {
-    final userProfile = await getCurrentUserProfile();
-    final response = await _supabase
-        .from('locations')
-        .select()
-        .eq('id', userProfile.locationId)
-        .single();
-    return response as Map<String, dynamic>;
-  }
 }
