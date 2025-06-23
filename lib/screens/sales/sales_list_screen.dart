@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/sale_model.dart';
 import '../../../models/sale_item_model.dart';
 import '../../../models/stock_model.dart';
+import '../../../models/user_profile.dart';
 import '../../core/services/sales_service.dart';
 import '../../core/services/stock_service.dart';
 import '../../core/services/auth_service.dart';
@@ -20,6 +22,7 @@ class SalesListScreen extends StatefulWidget {
 }
 
 class _SalesListScreenState extends State<SalesListScreen> {
+  final _supabase = Supabase.instance.client;
   late SalesService _salesService;
   late StockService _stockService;
   late AuthService _authService;
@@ -27,12 +30,19 @@ class _SalesListScreenState extends State<SalesListScreen> {
   bool _isLoading = true;
   List<Sale> _sales = [];
   List<Sale> _filteredSales = [];
-  
+  UserProfile? _userProfile;
+
   DateTime? _startDate;
   DateTime? _endDate;
   String? _selectedProduct;
-  
-  final List<String> _filterOptions = ['Today', 'Yesterday', 'Last 7 Days', 'Last Month'];
+  String? _selectedRepId;
+
+  final List<String> _filterOptions = [
+    'Today',
+    'Yesterday',
+    'Last 7 Days',
+    'Last Month'
+  ];
   String? _selectedFilter;
 
   final _currencyFormat = NumberFormat.currency(locale: 'en_NG', symbol: '₦');
@@ -49,19 +59,25 @@ class _SalesListScreenState extends State<SalesListScreen> {
   @override
   void initState() {
     super.initState();
-    _salesService = Provider.of<SalesService>(context, listen: false);
-    _stockService = Provider.of<StockService>(context, listen: false);
-    _authService = Provider.of<AuthService>(context, listen: false);
-    _loadSales();
+    _salesService = provider.Provider.of<SalesService>(context, listen: false);
+    _stockService = provider.Provider.of<StockService>(context, listen: false);
+    _authService = provider.Provider.of<AuthService>(context, listen: false);
+    _loadUserProfileAndSales();
   }
 
-  Future<void> _loadSales() async {
+  Future<void> _loadUserProfileAndSales() async {
     setState(() => _isLoading = true);
     try {
+      _userProfile = await _authService.getCurrentUserProfile();
+      if (_userProfile == null) {
+        throw Exception('User profile not found');
+      }
+
       final sales = await _salesService.getAllSales();
       setState(() {
         _sales = sales.cast<Sale>();
-        _applyFilters();
+        _filteredSales = _sales; // Initialize filtered sales with all sales
+        _applyFilters(); // Apply any existing filters
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -394,19 +410,27 @@ class _SalesListScreenState extends State<SalesListScreen> {
 
   void _applyFilters() {
     List<Sale> filtered = List.from(_sales);
-    
+
     if (_startDate != null && _endDate != null) {
-      filtered = filtered.where((sale) =>
-        sale.date.isAfter(_startDate!) && sale.date.isBefore(_endDate!.add(const Duration(days: 1))))
-        .toList();
+      filtered = filtered
+          .where((sale) =>
+              sale.date.isAfter(_startDate!) &&
+              sale.date.isBefore(_endDate!.add(const Duration(days: 1))))
+          .toList();
     }
-    
+
     if (_selectedProduct != null) {
-      filtered = filtered.where((sale) =>
-        sale.items.any((item) => item.productName == _selectedProduct))
-        .toList();
+      filtered = filtered
+          .where((sale) =>
+              sale.items.any((item) => item.productName == _selectedProduct))
+          .toList();
     }
-    
+
+    if (_selectedRepId != null) {
+      filtered =
+          filtered.where((sale) => sale.repId == _selectedRepId).toList();
+    }
+
     setState(() => _filteredSales = filtered);
   }
 
@@ -437,6 +461,10 @@ class _SalesListScreenState extends State<SalesListScreen> {
   }
 
   Widget _buildFilterSection() {
+    if (_userProfile == null) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -458,24 +486,27 @@ class _SalesListScreenState extends State<SalesListScreen> {
               Expanded(
                 child: Wrap(
                   spacing: 8,
-                  children: _filterOptions.map((filter) => FilterChip(
-                    label: Text(filter),
-                    selected: _selectedFilter == filter,
-                    onSelected: (selected) {
-                      if (selected) {
-                        _applyDateFilter(filter);
-                      } else {
-                        setState(() {
-                          _selectedFilter = null;
-                          _startDate = null;
-                          _endDate = null;
-                          _applyFilters();
-                        });
-                      }
-                    },
-                    selectedColor: const Color(0xFF4A90E2).withOpacity(0.2),
-                    checkmarkColor: const Color(0xFF4A90E2),
-                  )).toList(),
+                  children: _filterOptions
+                      .map((filter) => FilterChip(
+                            label: Text(filter),
+                            selected: _selectedFilter == filter,
+                            onSelected: (selected) {
+                              if (selected) {
+                                _applyDateFilter(filter);
+                              } else {
+                                setState(() {
+                                  _selectedFilter = null;
+                                  _startDate = null;
+                                  _endDate = null;
+                                  _applyFilters();
+                                });
+                              }
+                            },
+                            selectedColor:
+                                const Color(0xFF4A90E2).withOpacity(0.2),
+                            checkmarkColor: const Color(0xFF4A90E2),
+                          ))
+                      .toList(),
                 ),
               ),
               IconButton(
@@ -501,39 +532,163 @@ class _SalesListScreenState extends State<SalesListScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          FutureBuilder<List<StockItem>>(
-            future: _stockService.getStockItems(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const SizedBox.shrink();
-              
-              final products = snapshot.data!;
-              return DropdownButtonFormField<String>(
-                value: _selectedProduct,
-                decoration: InputDecoration(
-                  labelText: 'Filter by Product',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FutureBuilder<List<StockItem>>(
+                  future: _stockService.getStockItems(
+                      outletId: _userProfile?.outletId),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const SizedBox.shrink();
+
+                    final products = snapshot.data!;
+                    return DropdownButtonFormField<String>(
+                      value: _selectedProduct,
+                      decoration: InputDecoration(
+                        labelText: 'Filter by Product',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('All Products'),
+                        ),
+                        ...products.map((product) => DropdownMenuItem<String>(
+                              value: product.productName,
+                              child: Text(product.productName),
+                            )),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedProduct = value;
+                          _applyFilters();
+                        });
+                      },
+                    );
+                  },
                 ),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('All Products'),
-                  ),
-                  ...products.map((product) => DropdownMenuItem<String>(
-                    value: product.productName,
-                    child: Text(product.productName),
-                  )),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedProduct = value;
-                    _applyFilters();
-                  });
-                },
-              );
-            },
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: FutureBuilder<List<UserProfile>>(
+                  future: _supabase
+                      .from('profiles')
+                      .select()
+                      .eq('outlet_id', _userProfile?.outletId)
+                      .then(
+                    (response) {
+                      if (response == null) return <UserProfile>[];
+                      final List<dynamic> data = response;
+                      return data.where((json) => json != null).map((json) {
+                        try {
+                          final Map<String, dynamic> profileData = {
+                            ...json as Map<String, dynamic>,
+                            'email': json['email'] ?? '',
+                          };
+                          return UserProfile.fromJson(profileData);
+                        } catch (e) {
+                          print('Error parsing user profile: $e');
+                          return null;
+                        }
+                      }).whereType<UserProfile>().toList();
+                    },
+                  ).catchError((error) {
+                    print('Error fetching sales reps: $error');
+                    return <UserProfile>[];
+                  }),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return DropdownButtonFormField<String>(
+                        value: null,
+                        decoration: InputDecoration(
+                          labelText: 'Loading Sales Reps...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 12),
+                          suffixIcon: Container(
+                            margin: const EdgeInsets.all(8),
+                            width: 20,
+                            height: 20,
+                            child:
+                                const CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        items: const [],
+                        onChanged: null,
+                      );
+                    }
+
+                    if (snapshot.hasError) {
+                      return DropdownButtonFormField<String>(
+                        value: null,
+                        decoration: InputDecoration(
+                          labelText: 'Error Loading Sales Reps',
+                          errorText: 'Please try refreshing the page',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        items: const [],
+                        onChanged: null,
+                      );
+                    }
+
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return DropdownButtonFormField<String>(
+                        value: null,
+                        decoration: InputDecoration(
+                          labelText: 'No Sales Reps Available',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        items: const [],
+                        onChanged: null,
+                      );
+                    }
+
+                    final reps = snapshot.data!;
+                    return DropdownButtonFormField<String>(
+                      value: _selectedRepId,
+                      decoration: InputDecoration(
+                        labelText: 'Filter by Sales Rep',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('All Sales Reps'),
+                        ),
+                        ...reps.map((rep) => DropdownMenuItem<String>(
+                              value: rep.id,
+                              child: Text(rep.fullName ?? rep.email),
+                            )),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedRepId = value;
+                          _applyFilters();
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -548,7 +703,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadSales,
+            onPressed: _loadUserProfileAndSales,
           ),
         ],
       ),
@@ -561,7 +716,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async {
-                await _loadSales();
+                await _loadUserProfileAndSales();
                 if (widget.onRefresh != null) await widget.onRefresh!();
               },
               child: _isLoading

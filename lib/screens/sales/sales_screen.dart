@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider;
 import '../../core/services/sales_service.dart';
 import '../../core/services/stock_service.dart';
 import '../../core/services/auth_service.dart';
@@ -22,9 +22,9 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void initState() {
     super.initState();
-    _salesService = Provider.of<SalesService>(context, listen: false);
-    _stockService = Provider.of<StockService>(context, listen: false);
-    _authService = Provider.of<AuthService>(context, listen: false);
+    _salesService = provider.Provider.of<SalesService>(context, listen: false);
+    _stockService = provider.Provider.of<StockService>(context, listen: false);
+    _authService = provider.Provider.of<AuthService>(context, listen: false);
     _initializeData();
   }
 

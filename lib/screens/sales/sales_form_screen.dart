@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/sales_service.dart';
@@ -42,9 +42,9 @@ class _SalesFormScreenState extends State<SalesFormScreen> {
   @override
   void initState() {
     super.initState();
-    _salesService = Provider.of<SalesService>(context, listen: false);
-    _stockService = Provider.of<StockService>(context, listen: false);
-    _authService = Provider.of<AuthService>(context, listen: false);
+    _salesService = provider.Provider.of<SalesService>(context, listen: false);
+    _stockService = provider.Provider.of<StockService>(context, listen: false);
+    _authService = provider.Provider.of<AuthService>(context, listen: false);
     _loadUserProfile();
     _addNewSaleItem(); // Add first item row by default
   }
