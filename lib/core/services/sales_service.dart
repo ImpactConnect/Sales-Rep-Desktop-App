@@ -99,6 +99,27 @@ class SalesService {
     return Customer.fromMap(response);
   }
 
+  Future<List<String>> getSalesRepsByLocation(String locationId) async {
+    final response = await _supabaseClient
+        .from('profiles')
+        .select('full_name')
+        .eq('location_id', locationId)
+        .eq('role', 'sales_rep');
+    return List<String>.from(response.map((rep) => rep['full_name'] as String));
+  }
+
+  Future<List<String>> getUniqueProductNames() async {
+    final response = await _supabaseClient
+        .from('sales_items')
+        .select('products!inner(name)')
+        .order('products(name)');
+    final uniqueNames = <String>{};
+    for (final item in response) {
+      uniqueNames.add((item['products'] as Map)['name'] as String);
+    }
+    return uniqueNames.toList();
+  }
+
   Future<List<Sale>> getAllSales() async {
     return await _salesDbService.getAllSales();
   }

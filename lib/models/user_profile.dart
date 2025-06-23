@@ -4,6 +4,7 @@ class UserProfile {
   final String? fullName;
   final String? role;
   final String? outletId;
+  final String? locationId;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -13,6 +14,7 @@ class UserProfile {
     this.fullName,
     this.role,
     this.outletId,
+    this.locationId,
     this.createdAt,
     this.updatedAt,
   });
@@ -24,6 +26,7 @@ class UserProfile {
       fullName: json['full_name'] as String?,
       role: json['role'] as String?,
       outletId: json['outlet_id'] as String?,
+      locationId: json['location_id'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : null,
@@ -40,6 +43,7 @@ class UserProfile {
       if (fullName != null) 'full_name': fullName,
       if (role != null) 'role': role,
       if (outletId != null) 'outlet_id': outletId,
+      if (locationId != null) 'location_id': locationId,
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
     };
@@ -51,6 +55,7 @@ class UserProfile {
     String? fullName,
     String? role,
     String? outletId,
+    String? locationId,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -60,6 +65,7 @@ class UserProfile {
       fullName: fullName ?? this.fullName,
       role: role ?? this.role,
       outletId: outletId ?? this.outletId,
+      locationId: locationId ?? this.locationId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
