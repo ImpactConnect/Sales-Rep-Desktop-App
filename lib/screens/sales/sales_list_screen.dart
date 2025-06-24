@@ -89,76 +89,240 @@ class _SalesListScreenState extends State<SalesListScreen> {
   }
 
   Widget _buildMetricsCard() {
-    final int salesCount = _sales.length;
+    final int salesCount = _filteredSales.length;
     final int totalCustomers =
-        _sales.where((s) => s.customerName?.isNotEmpty ?? false).length;
+        _filteredSales.where((s) => s.customerName?.isNotEmpty ?? false).length;
     final int totalItemsSold =
-        _sales.fold<int>(0, (sum, sale) => sum + (sale as Sale).totalQuantity);
+        _filteredSales.fold<int>(0, (sum, sale) => sum + (sale as Sale).totalQuantity);
     final double totalRevenue =
-        _sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
+        _filteredSales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
 
-    return Container(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
-      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildMetric('Sales', salesCount.toString()),
-          _buildMetric('Customers', totalCustomers.toString()),
-          _buildMetric('Items', totalItemsSold.toString()),
-          _buildMetric('Revenue', _currencyFormat.format(totalRevenue)),
+          _buildMetric(
+            'Sales',
+            salesCount.toString(),
+            Icons.shopping_cart,
+            Colors.blue,
+          ),
+          const SizedBox(width: 12),
+          _buildMetric(
+            'Customers',
+            totalCustomers.toString(),
+            Icons.people,
+            Colors.green,
+          ),
+          const SizedBox(width: 12),
+          _buildMetric(
+            'Items',
+            totalItemsSold.toString(),
+            Icons.inventory,
+            Colors.orange,
+          ),
+          const SizedBox(width: 12),
+          _buildMetric(
+            'Revenue',
+            _currencyFormat.format(totalRevenue),
+            Icons.payments,
+            Colors.purple,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMetric(String label, String value) {
-    return Column(
-      children: [
-        Text(value,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 2),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-      ],
+  Widget _buildMetric(String label, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 24),
+                const SizedBox(width: 8),
+                Text(label,
+                    style: TextStyle(fontSize: 14, color: color.withOpacity(0.8))),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color.withOpacity(0.9),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildSaleDetailsDialog(Sale sale) {
-    return AlertDialog(
-      title: const Text('Sale Details'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Customer: ${sale.customerName ?? "N/A"}'),
-          Text('Date: ${_formatDate(sale.date)}'),
-          const Divider(),
-          ...sale.items.map((item) => ListTile(
-                title: Text(item.productName ?? 'Unknown Product'),
-                subtitle: Text(
-                    '${item.quantity} × ${_currencyFormat.format(item.unitPrice)}'),
-                trailing: Text(_currencyFormat.format(item.total)),
-              )),
-          const Divider(),
-          Text('VAT: ${_currencyFormat.format(sale.vat)}'),
-          Text('Total: ${_currencyFormat.format(sale.totalAmount)}'),
-        ],
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      sale.customerName ?? 'N/A',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatDate(sale.date),
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Items',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  ...sale.items.map((item) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: Colors.grey[300]!,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                item.productName ?? 'Unknown Product',
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                '${item.quantity} × ${_currencyFormat.format(item.unitPrice)}',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                _currencyFormat.format(item.total),
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'VAT',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _currencyFormat.format(sale.vat),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text(
+                        'Total Amount',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _currencyFormat.format(sale.totalAmount),
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  // TODO: Implement print logic
+                  Navigator.pop(context);
+                },
+                icon: const Icon(Icons.print),
+                label: const Text('Print Receipt'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context);
-            // TODO: Add print logic
-          },
-          child: const Text('Print Receipt'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
     );
   }
 
@@ -250,8 +414,8 @@ class _SalesListScreenState extends State<SalesListScreen> {
                             ),
                             Expanded(
                               flex: 3,
-                              child: Text(
-                                  _formatNumber(item.quantity * item.unitPrice)),
+                              child: Text(_formatNumber(
+                                  item.quantity * item.unitPrice)),
                             ),
                           ],
                         ),
@@ -300,7 +464,8 @@ class _SalesListScreenState extends State<SalesListScreen> {
                     children: [
                       Expanded(
                           child: Text(item.productName ?? 'Unknown Product')),
-                      Text('${item.quantity} × ${_currencyFormat.format(item.unitPrice)}'),
+                      Text(
+                          '${item.quantity} × ${_currencyFormat.format(item.unitPrice)}'),
                       Text(_currencyFormat.format(item.total)),
                     ],
                   ),
@@ -394,15 +559,17 @@ class _SalesListScreenState extends State<SalesListScreen> {
     List<Sale> filtered = List.from(_sales);
 
     if (_startDate != null && _endDate != null) {
-      filtered = filtered
-          .where((sale) {
-            final saleDate = DateTime(sale.date.year, sale.date.month, sale.date.day);
-            final startDate = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
-            final endDate = DateTime(_endDate!.year, _endDate!.month, _endDate!.day);
-            return (saleDate.isAtSameMomentAs(startDate) || saleDate.isAfter(startDate)) &&
-                   (saleDate.isAtSameMomentAs(endDate) || saleDate.isBefore(endDate));
-          })
-          .toList();
+      filtered = filtered.where((sale) {
+        final saleDate =
+            DateTime(sale.date.year, sale.date.month, sale.date.day);
+        final startDate =
+            DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
+        final endDate =
+            DateTime(_endDate!.year, _endDate!.month, _endDate!.day);
+        return (saleDate.isAtSameMomentAs(startDate) ||
+                saleDate.isAfter(startDate)) &&
+            (saleDate.isAtSameMomentAs(endDate) || saleDate.isBefore(endDate));
+      }).toList();
     }
 
     if (_selectedProduct != null) {
@@ -432,7 +599,8 @@ class _SalesListScreenState extends State<SalesListScreen> {
         case 'Yesterday':
           final yesterday = now.subtract(const Duration(days: 1));
           _startDate = DateTime(yesterday.year, yesterday.month, yesterday.day);
-          _endDate = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
+          _endDate = DateTime(
+              yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
           break;
         case 'Last 7 Days':
           _startDate = DateTime(now.year, now.month, now.day - 7);
@@ -698,29 +866,59 @@ class _SalesListScreenState extends State<SalesListScreen> {
           ),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildMetricsCard(),
-          _buildFilterSection(),
-          _buildSalesListHeader(),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await _loadUserProfileAndSales();
-                if (widget.onRefresh != null) await widget.onRefresh!();
-              },
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.builder(
-                      itemCount: _filteredSales.length,
-                      itemBuilder: (context, index) =>
-                          _buildSaleItemTile(_filteredSales[index]),
-                    ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                _buildMetricsCard(),
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Filter Sales',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildFilterSection(),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Sales Records',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildSalesListHeader(),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _filteredSales.length,
+                    itemBuilder: (context, index) =>
+                        _buildSaleItemTile(_filteredSales[index]),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
