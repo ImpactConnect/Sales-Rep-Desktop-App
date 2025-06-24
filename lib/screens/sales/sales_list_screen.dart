@@ -41,7 +41,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
     'Today',
     'Yesterday',
     'Last 7 Days',
-    'Last Month'
+    'This Month'
   ];
   String? _selectedFilter;
 
@@ -225,25 +225,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: Text('Item',
-                            style: TextStyle(fontWeight: FontWeight.w500)),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text('Qty',
-                            style: TextStyle(fontWeight: FontWeight.w500)),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: Text('Total',
-                            style: TextStyle(fontWeight: FontWeight.w500)),
-                      ),
-                    ],
-                  ),
+                  const SizedBox(height: 0),
                   const SizedBox(height: 4),
                   ...sale.items.map((item) => Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
@@ -269,7 +251,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
                             Expanded(
                               flex: 3,
                               child: Text(
-                                  '₦${_formatNumber(item.quantity * item.unitPrice)}'),
+                                  _formatNumber(item.quantity * item.unitPrice)),
                             ),
                           ],
                         ),
@@ -279,12 +261,12 @@ class _SalesListScreenState extends State<SalesListScreen> {
             ),
             Expanded(
               flex: 2,
-              child: Text('₦${_formatNumber(sale.vatAmount)}'),
+              child: Text(_formatNumber(sale.vatAmount)),
             ),
             Expanded(
               flex: 2,
               child: Text(
-                '₦${_formatNumber(sale.totalAmount)}',
+                _formatNumber(sale.totalAmount),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -318,7 +300,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
                     children: [
                       Expanded(
                           child: Text(item.productName ?? 'Unknown Product')),
-                      Text('${item.quantity} × ₦${item.unitPrice}'),
+                      Text('${item.quantity} × ${_currencyFormat.format(item.unitPrice)}'),
                       Text(_currencyFormat.format(item.total)),
                     ],
                   ),
@@ -413,9 +395,13 @@ class _SalesListScreenState extends State<SalesListScreen> {
 
     if (_startDate != null && _endDate != null) {
       filtered = filtered
-          .where((sale) =>
-              sale.date.isAfter(_startDate!) &&
-              sale.date.isBefore(_endDate!.add(const Duration(days: 1))))
+          .where((sale) {
+            final saleDate = DateTime(sale.date.year, sale.date.month, sale.date.day);
+            final startDate = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
+            final endDate = DateTime(_endDate!.year, _endDate!.month, _endDate!.day);
+            return (saleDate.isAtSameMomentAs(startDate) || saleDate.isAfter(startDate)) &&
+                   (saleDate.isAtSameMomentAs(endDate) || saleDate.isBefore(endDate));
+          })
           .toList();
     }
 
@@ -444,16 +430,17 @@ class _SalesListScreenState extends State<SalesListScreen> {
           _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
           break;
         case 'Yesterday':
-          _startDate = DateTime(now.year, now.month, now.day - 1);
-          _endDate = DateTime(now.year, now.month, now.day - 1, 23, 59, 59);
+          final yesterday = now.subtract(const Duration(days: 1));
+          _startDate = DateTime(yesterday.year, yesterday.month, yesterday.day);
+          _endDate = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
           break;
         case 'Last 7 Days':
           _startDate = DateTime(now.year, now.month, now.day - 7);
           _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
           break;
-        case 'Last Month':
-          _startDate = DateTime(now.year, now.month - 1, now.day);
-          _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+        case 'This Month':
+          _startDate = DateTime(now.year, now.month, 1);
+          _endDate = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
           break;
       }
       _applyFilters();
