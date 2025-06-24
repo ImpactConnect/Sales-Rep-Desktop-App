@@ -422,7 +422,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
     if (_selectedProduct != null) {
       filtered = filtered
           .where((sale) =>
-              sale.items.any((item) => item.productName == _selectedProduct))
+              sale.items.any((item) => item.productId == _selectedProduct))
           .toList();
     }
 
@@ -558,7 +558,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
                           child: Text('All Products'),
                         ),
                         ...products.map((product) => DropdownMenuItem<String>(
-                              value: product.productName,
+                              value: product.id,
                               child: Text(product.productName),
                             )),
                       ],
@@ -583,18 +583,22 @@ class _SalesListScreenState extends State<SalesListScreen> {
                     (response) {
                       if (response == null) return <UserProfile>[];
                       final List<dynamic> data = response;
-                      return data.where((json) => json != null).map((json) {
-                        try {
-                          final Map<String, dynamic> profileData = {
-                            ...json as Map<String, dynamic>,
-                            'email': json['email'] ?? '',
-                          };
-                          return UserProfile.fromJson(profileData);
-                        } catch (e) {
-                          print('Error parsing user profile: $e');
-                          return null;
-                        }
-                      }).whereType<UserProfile>().toList();
+                      return data
+                          .where((json) => json != null)
+                          .map((json) {
+                            try {
+                              final Map<String, dynamic> profileData = {
+                                ...json as Map<String, dynamic>,
+                                'email': json['email'] ?? '',
+                              };
+                              return UserProfile.fromJson(profileData);
+                            } catch (e) {
+                              print('Error parsing user profile: $e');
+                              return null;
+                            }
+                          })
+                          .whereType<UserProfile>()
+                          .toList();
                     },
                   ).catchError((error) {
                     print('Error fetching sales reps: $error');
