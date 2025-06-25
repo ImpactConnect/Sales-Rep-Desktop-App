@@ -89,13 +89,13 @@ class _SalesListScreenState extends State<SalesListScreen> {
   }
 
   Widget _buildMetricsCard() {
-    final int salesCount = _sales.length;
+    final int salesCount = _filteredSales.length;
     final int totalCustomers =
-        _sales.where((s) => s.customerName?.isNotEmpty ?? false).length;
+        _filteredSales.where((s) => s.customerName?.isNotEmpty ?? false).length;
     final int totalItemsSold =
-        _sales.fold<int>(0, (sum, sale) => sum + (sale as Sale).totalQuantity);
+        _filteredSales.fold<int>(0, (sum, sale) => sum + (sale as Sale).totalQuantity);
     final double totalRevenue =
-        _sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
+        _filteredSales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
