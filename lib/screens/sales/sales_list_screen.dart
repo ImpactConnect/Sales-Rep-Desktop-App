@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import '../../core/services/pdf_service.dart';
 import '../../../models/sale_model.dart';
 import '../../../models/sale_item_model.dart';
 import '../../../models/stock_model.dart';
@@ -11,6 +16,8 @@ import '../../core/services/stock_service.dart';
 import '../../core/services/auth_service.dart';
 
 class SalesListScreen extends StatefulWidget {
+  static final GlobalKey<_SalesListScreenState> screenKey =
+      GlobalKey<_SalesListScreenState>();
   static const String routeName = '/sales';
 
   final Future<void> Function()? onRefresh;
@@ -31,6 +38,9 @@ class _SalesListScreenState extends State<SalesListScreen> {
   List<Sale> _sales = [];
   List<Sale> _filteredSales = [];
   UserProfile? _userProfile;
+
+  // Getter for filtered sales
+  List<Sale> get filteredSales => _filteredSales;
 
   DateTime? _startDate;
   DateTime? _endDate;
@@ -92,8 +102,8 @@ class _SalesListScreenState extends State<SalesListScreen> {
     final int salesCount = _filteredSales.length;
     final int totalCustomers =
         _filteredSales.where((s) => s.customerName?.isNotEmpty ?? false).length;
-    final int totalItemsSold =
-        _filteredSales.fold<int>(0, (sum, sale) => sum + (sale as Sale).totalQuantity);
+    final int totalItemsSold = _filteredSales.fold<int>(
+        0, (sum, sale) => sum + (sale as Sale).totalQuantity);
     final double totalRevenue =
         _filteredSales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
 
@@ -135,11 +145,19 @@ class _SalesListScreenState extends State<SalesListScreen> {
           Text('Customer: ${sale.customerName ?? "N/A"}'),
           Text('Date: ${_formatDate(sale.date)}'),
           const Divider(),
-          ...sale.items.map((item) => ListTile(
-                title: Text(item.productName ?? 'Unknown Product'),
-                subtitle: Text(
-                    '${item.quantity} × ${_currencyFormat.format(item.unitPrice)}'),
-                trailing: Text(_currencyFormat.format(item.total)),
+          ...sale.items.map((item) => FutureBuilder<StockItem>(
+                future: _stockService.getStockItemById(item.productId),
+                builder: (context, snapshot) {
+                  final productName = snapshot.hasData
+                      ? snapshot.data!.productName
+                      : (item.productName ?? 'Loading...');
+                  return ListTile(
+                    title: Text(productName),
+                    subtitle: Text(
+                        '${item.quantity} × ${_currencyFormat.format(item.unitPrice)}'),
+                    trailing: Text(_currencyFormat.format(item.total)),
+                  );
+                },
               )),
           const Divider(),
           Text('VAT: ${_currencyFormat.format(sale.vat)}'),
@@ -148,9 +166,120 @@ class _SalesListScreenState extends State<SalesListScreen> {
       ),
       actions: [
         TextButton(
-          onPressed: () {
+          onPressed: () async {
             Navigator.pop(context);
-            // TODO: Add print logic
+            // Show loading indicator
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Generating PDF receipt...')),
+              );
+            }
+            final pdf = pw.Document();
+
+            // First, fetch all product names
+            final itemsWithNames = await Future.wait(
+              sale.items.map((item) async {
+                try {
+                  final stockItem =
+                      await _stockService.getStockItemById(item.productId);
+                  return {'item': item, 'productName': stockItem.productName};
+                } catch (e) {
+                  print(
+                      'Error fetching product name for ${item.productId}: $e');
+                  return {
+                    'item': item,
+                    'productName': item.productName ?? 'Unknown Product'
+                  };
+                }
+              }),
+            );
+
+            pdf.addPage(
+              pw.Page(
+                pageFormat: PdfPageFormat(
+                  226.772, // 80mm width
+                  double.infinity, // Auto height
+                  marginAll: 8,
+                ),
+                theme: pw.ThemeData.withFont(
+                  base: pw.Font.helvetica(),
+                  bold: pw.Font.helveticaBold(),
+                ),
+                build: (context) => pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Center(
+                      child: pw.Text(
+                        'Sales Receipt',
+                        style: pw.TextStyle(
+                            fontSize: 14, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Text('Customer: ${sale.customerName ?? "N/A"}'),
+                    pw.Text('Date: ${_formatDate(sale.date)}'),
+                    pw.Divider(),
+                    ...itemsWithNames.map((itemData) => pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(itemData['productName'] as String),
+                            pw.Row(
+                              mainAxisAlignment:
+                                  pw.MainAxisAlignment.spaceBetween,
+                              children: [
+                                pw.Text(
+                                    '${(itemData['item'] as SaleItem).quantity} × ${_currencyFormat.format((itemData['item'] as SaleItem).unitPrice)}'),
+                                pw.Text(_currencyFormat.format(
+                                    (itemData['item'] as SaleItem).total)),
+                              ],
+                            ),
+                            pw.SizedBox(height: 5),
+                          ],
+                        )),
+                    pw.Divider(),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('VAT:'),
+                        pw.Text(_currencyFormat.format(sale.vat)),
+                      ],
+                    ),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Total:',
+                            style:
+                                pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                        pw.Text(_currencyFormat.format(sale.totalAmount),
+                            style:
+                                pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Center(child: pw.Text('Thank you for your business!')),
+                  ],
+                ),
+              ),
+            );
+
+            try {
+              await PdfService().printDocument(
+                onLayout: (format) async => pdf.save(),
+                filename: 'Sale_${sale.id}_Receipt.pdf',
+              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('PDF receipt generated successfully!')),
+                );
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error generating PDF: $e')),
+                );
+              }
+            }
           },
           child: const Text('Print Receipt'),
         ),
@@ -171,34 +300,53 @@ class _SalesListScreenState extends State<SalesListScreen> {
 
   Widget _buildSalesListHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.grey[200],
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: const [
           Expanded(
-              flex: 2,
-              child:
-                  Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+            flex: 2,
+            child: Text('Date',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ),
           Expanded(
-              flex: 3,
-              child: Text('Customer',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
+            flex: 4,
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 4,
+                  child: Text('Items',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text('Quantity',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Text('Total/Item',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+              ],
+            ),
+          ),
           Expanded(
-              flex: 3,
-              child: Text('Product',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
+            flex: 2,
+            child: Text('VAT',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                textAlign: TextAlign.start),
+          ),
           Expanded(
-              flex: 2,
-              child: Text('Quantity',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(
-              flex: 2,
-              child:
-                  Text('VAT', style: TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(
-              flex: 2,
-              child:
-                  Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
+            flex: 2,
+            child: Text('Total',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                textAlign: TextAlign.start),
+          ),
         ],
       ),
     );
@@ -206,123 +354,162 @@ class _SalesListScreenState extends State<SalesListScreen> {
 
   Widget _buildSaleItemTile(Sale sale) {
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              flex: 2,
-              child: Text(_formatDate(sale.date)),
-            ),
-            Expanded(
-              flex: 3,
-              child: Text(sale.customerName ?? 'N/A'),
-            ),
-            Expanded(
-              flex: 8,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 0),
-                  const SizedBox(height: 4),
-                  ...sale.items.map((item) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 4,
-                              child: FutureBuilder<StockItem>(
-                                future: StockService()
-                                    .getStockItemById(item.productId),
-                                builder: (context, snapshot) {
-                                  if (snapshot.hasData) {
-                                    return Text(snapshot.data!.productName);
-                                  }
-                                  return const Text('Loading...');
-                                },
-                              ),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: InkWell(
+          onTap: () => _showSaleDetails(sale),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    _formatDate(sale.date),
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                Expanded(
+                  flex: 4,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ...sale.items.map((item) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 4,
+                                  child: FutureBuilder<StockItem>(
+                                    future: StockService()
+                                        .getStockItemById(item.productId),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.hasData) {
+                                        return Text(
+                                          snapshot.data!.productName,
+                                          style: const TextStyle(fontSize: 13),
+                                        );
+                                      }
+                                      return const Text('Loading...',
+                                          style: TextStyle(fontSize: 13));
+                                    },
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    item.quantity.toString(),
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    _formatNumber(
+                                        item.quantity * item.unitPrice),
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              ],
                             ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(item.quantity.toString()),
-                            ),
-                            Expanded(
-                              flex: 3,
-                              child: Text(_formatNumber(
-                                  item.quantity * item.unitPrice)),
-                            ),
-                          ],
-                        ),
-                      )),
-                ],
-              ),
+                          )),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    _formatNumber(sale.vatAmount),
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    _formatNumber(sale.totalAmount),
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              flex: 2,
-              child: Text(_formatNumber(sale.vatAmount)),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                _formatNumber(sale.totalAmount),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      ),
+          )),
     );
   }
 
   Widget _buildSaleCard(Sale sale) {
     return Card(
       elevation: 2,
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: ListTile(
-        onTap: () => _showSaleDetails(sale),
-        title: Text(sale.customerName ?? '',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_formatDate(sale.date),
-                style: const TextStyle(color: Colors.grey)),
-            const SizedBox(height: 4),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: sale.items.map((item) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                          child: Text(item.productName ?? 'Unknown Product')),
-                      Text(
-                          '${item.quantity} × ${_currencyFormat.format(item.unitPrice)}'),
-                      Text(_currencyFormat.format(item.total)),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              _currencyFormat.format(sale.totalAmount),
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          onTap: () => _showSaleDetails(sale),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  sale.customerName ?? '',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 13),
+                ),
               ),
+              Text(
+                _formatDate(sale.date),
+                style: const TextStyle(color: Colors.grey, fontSize: 11),
+              ),
+            ],
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: sale.items.map((item) {
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.productName ?? 'Unknown Product',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  Text(
+                    '${item.quantity} × ${_currencyFormat.format(item.unitPrice)}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _currencyFormat.format(item.total),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+          trailing: RichText(
+            textAlign: TextAlign.end,
+            text: TextSpan(
+              style: DefaultTextStyle.of(context).style,
+              children: [
+                TextSpan(
+                  text: _currencyFormat.format(sale.totalAmount) + '\n',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+                const TextSpan(
+                  text: 'Total',
+                  style: TextStyle(fontSize: 10, color: Colors.grey),
+                ),
+              ],
             ),
-            const SizedBox(height: 2),
-            const Text("Total"),
-          ],
+          ),
         ),
       ),
     );
@@ -705,15 +892,6 @@ class _SalesListScreenState extends State<SalesListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sales History'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadUserProfileAndSales,
-          ),
-        ],
-      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

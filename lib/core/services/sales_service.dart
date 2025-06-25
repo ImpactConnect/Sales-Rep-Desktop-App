@@ -10,7 +10,7 @@ class SalesService {
   final SalesDbService _salesDbService;
   final SupabaseClient _supabaseClient;
   final StockService _stockService;
-  static const double _vatRate = 16.0; // 16% VAT rate
+  static const double _vatRate = 0.0; // 16% VAT rate
 
   SalesService(
     this._salesDbService,

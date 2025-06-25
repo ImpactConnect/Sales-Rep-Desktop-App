@@ -21,6 +21,8 @@ dependencies:
   uuid: ^4.2.1
   connectivity_plus: ^5.0.2
   intl: ^0.18.1
+  printing: ^5.11.1
+  pdf: ^3.10.7
 
 dev_dependencies:
   flutter_test:

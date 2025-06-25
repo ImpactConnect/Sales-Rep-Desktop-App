@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'core/services/pdf_service.dart';
 
 // Use provider.Provider instead of Provider in the widget tree
 
@@ -24,6 +29,9 @@ import 'core/constants/app_constants.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize PDF service
+  await PdfService().initialize();
 
   // Initialize sqflite for Windows
   sqfliteFfiInit();
