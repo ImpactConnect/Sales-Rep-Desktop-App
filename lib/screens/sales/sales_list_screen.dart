@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -38,6 +39,9 @@ class _SalesListScreenState extends State<SalesListScreen> {
   List<Sale> _sales = [];
   List<Sale> _filteredSales = [];
   UserProfile? _userProfile;
+  DateTime? _lastSyncDate;
+  int _syncedCount = 0;
+  int _unsyncedCount = 0;
 
   // Getter for filtered sales
   List<Sale> get filteredSales => _filteredSales;
@@ -66,6 +70,8 @@ class _SalesListScreenState extends State<SalesListScreen> {
     return _dateFormat.format(date);
   }
 
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +79,13 @@ class _SalesListScreenState extends State<SalesListScreen> {
     _stockService = provider.Provider.of<StockService>(context, listen: false);
     _authService = provider.Provider.of<AuthService>(context, listen: false);
     _loadUserProfileAndSales();
+
+    // Set up periodic refresh
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        _loadUserProfileAndSales();
+      }
+    });
   }
 
   Future<void> _loadUserProfileAndSales() async {
@@ -84,9 +97,17 @@ class _SalesListScreenState extends State<SalesListScreen> {
       }
 
       final sales = await _salesService.getAllSales();
+      final syncedSales = sales.where((s) => s.synced).toList();
+      final unsyncedSales = sales.where((s) => !s.synced).toList();
+      
       setState(() {
         _sales = sales.cast<Sale>();
         _filteredSales = _sales; // Initialize filtered sales with all sales
+        _syncedCount = syncedSales.length;
+        _unsyncedCount = unsyncedSales.length;
+        _lastSyncDate = syncedSales.isNotEmpty 
+            ? syncedSales.map((s) => s.createdAt).reduce((a, b) => a.isAfter(b) ? a : b)
+            : null;
         _applyFilters(); // Apply any existing filters
       });
     } catch (e) {
@@ -108,30 +129,79 @@ class _SalesListScreenState extends State<SalesListScreen> {
         _filteredSales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: const BoxDecoration(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildMetric('Sales', salesCount.toString()),
-          _buildMetric('Customers', totalCustomers.toString()),
-          _buildMetric('Items', totalItemsSold.toString()),
-          _buildMetric('Revenue', _currencyFormat.format(totalRevenue)),
+          _buildMetric(
+            'Sales',
+            salesCount.toString(),
+            Icons.receipt_long,
+            Colors.blue.shade700,
+          ),
+          Container(
+            height: 30,
+            width: 1,
+            color: Colors.grey.shade200,
+          ),
+          _buildMetric(
+            'Customers',
+            totalCustomers.toString(),
+            Icons.people,
+            Colors.green.shade700,
+          ),
+          Container(
+            height: 30,
+            width: 1,
+            color: Colors.grey.shade200,
+          ),
+          _buildMetric(
+            'Items',
+            totalItemsSold.toString(),
+            Icons.inventory_2,
+            Colors.orange.shade700,
+          ),
+          Container(
+            height: 30,
+            width: 1,
+            color: Colors.grey.shade200,
+          ),
+          _buildMetric(
+            'Revenue',
+            _currencyFormat.format(totalRevenue),
+            Icons.payments,
+            Colors.purple.shade700,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMetric(String label, String value) {
+  Widget _buildMetric(String label, String value, IconData icon, Color color) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(value,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(width: 4),
+            Text(
+              value,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+            ),
+          ],
+        ),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+        ),
       ],
     );
   }
@@ -354,6 +424,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
 
   Widget _buildSaleItemTile(Sale sale) {
     return Card(
+      key: ValueKey(sale.id),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: InkWell(
           onTap: () => _showSaleDetails(sale),
@@ -426,92 +497,26 @@ class _SalesListScreenState extends State<SalesListScreen> {
                 ),
                 Expanded(
                   flex: 2,
-                  child: Text(
-                    _formatNumber(sale.totalAmount),
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.bold),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _formatNumber(sale.totalAmount),
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Icon(
+                        sale.synced ? Icons.cloud_done : Icons.cloud_off,
+                        size: 16,
+                        color: sale.synced ? Colors.green : Colors.grey,
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           )),
-    );
-  }
-
-  Widget _buildSaleCard(Sale sale) {
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 48),
-        child: ListTile(
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          onTap: () => _showSaleDetails(sale),
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  sale.customerName ?? '',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13),
-                ),
-              ),
-              Text(
-                _formatDate(sale.date),
-                style: const TextStyle(color: Colors.grey, fontSize: 11),
-              ),
-            ],
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: sale.items.map((item) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      item.productName ?? 'Unknown Product',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  Text(
-                    '${item.quantity} × ${_currencyFormat.format(item.unitPrice)}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _currencyFormat.format(item.total),
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
-          trailing: RichText(
-            textAlign: TextAlign.end,
-            text: TextSpan(
-              style: DefaultTextStyle.of(context).style,
-              children: [
-                TextSpan(
-                  text: _currencyFormat.format(sale.totalAmount) + '\n',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-                const TextSpan(
-                  text: 'Total',
-                  style: TextStyle(fontSize: 10, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -890,11 +895,82 @@ class _SalesListScreenState extends State<SalesListScreen> {
   }
 
   @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Widget _buildSyncStatusSection() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(
+                  'Last Sync: ${_lastSyncDate != null ? _formatDate(_lastSyncDate!) : "Never"}',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12),
+                  width: 1,
+                  height: 16,
+                  color: Colors.grey.shade300,
+                ),
+                const Icon(Icons.cloud_done, size: 16, color: Colors.green),
+                const SizedBox(width: 4),
+                Text(
+                  '$_syncedCount synced',
+                  style: const TextStyle(fontSize: 13, color: Colors.green),
+                ),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12),
+                  width: 1,
+                  height: 16,
+                  color: Colors.grey.shade300,
+                ),
+                const Icon(Icons.cloud_queue, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(
+                  '$_unsyncedCount pending',
+                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              // Sync functionality will be added later
+            },
+            icon: const Icon(Icons.sync, size: 18),
+            label: const Text('Sync Now'),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              textStyle: const TextStyle(fontSize: 13),
+              backgroundColor: Theme.of(context).primaryColor,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _buildSyncStatusSection(),
           _buildMetricsCard(),
           _buildFilterSection(),
           _buildSalesListHeader(),
