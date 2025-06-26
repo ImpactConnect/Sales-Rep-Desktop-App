@@ -5,18 +5,22 @@ import '../../models/sale_item_model.dart';
 import '../../models/customer_model.dart';
 import '../../models/stock_model.dart';
 import 'stock_service.dart';
+import 'sync_service.dart';
 
 class SalesService {
   final SalesDbService _salesDbService;
   final SupabaseClient _supabaseClient;
   final StockService _stockService;
+  late final SyncService _syncService;
   static const double _vatRate = 0.0; // 16% VAT rate
 
   SalesService(
     this._salesDbService,
     this._supabaseClient,
     this._stockService,
-  );
+  ) {
+    _syncService = SyncService(_salesDbService);
+  }
 
   Future<void> addSale(Sale sale) async {
     // Validate all items have sufficient stock
@@ -67,11 +71,13 @@ class SalesService {
       };
 
       // Start a transaction
-      await _supabaseClient.rpc('create_sale_with_items', params: {
+      final response = await _supabaseClient.rpc('create_sale_with_items', params: {
         'sale_data': saleData,
       });
+      
+      final serverSaleId = response['id'] as String;
 
-      await _salesDbService.markSaleAsSynced(sale.id);
+      await _salesDbService.markSaleAsSynced(sale.id, serverSaleId);
     } catch (e) {
       print('Failed to sync sale with Supabase: $e');
     }
@@ -101,6 +107,18 @@ class SalesService {
 
   Future<List<Sale>> getAllSales() async {
     return await _salesDbService.getAllSales();
+  }
+
+  Future<void> resetDatabase() async {
+    await _salesDbService.resetDatabase();
+  }
+
+  Future<List<Sale>> getUnsyncedSales() async {
+    return await _syncService.getUnsyncedSales();
+  }
+
+  Future<SyncResult> syncAllPendingSales() async {
+    return await _syncService.syncAllPendingSales();
   }
 
   Future<List<Sale>> getFilteredSales({
@@ -147,12 +165,14 @@ class SalesService {
         final saleData = sale.toMap();
         final itemsData = sale.items.map((item) => item.toMap()).toList();
 
-        await _supabaseClient.rpc('create_sale_with_items', params: {
+        final response = await _supabaseClient.rpc('create_sale_with_items', params: {
           'sale_data': saleData,
           'items_data': itemsData,
         });
+        
+        final serverSaleId = response['id'] as String;
 
-        await _salesDbService.markSaleAsSynced(sale.id);
+        await _salesDbService.markSaleAsSynced(sale.id, serverSaleId);
       } catch (e) {
         print('Failed to sync sale ${sale.id}: $e');
         continue;

@@ -11,13 +11,31 @@ class DatabaseService {
     return _database!;
   }
 
+  Future<void> deleteDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'sales_rep.db');
+    await databaseFactory.deleteDatabase(path);
+  }
+
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'sales_rep.db');
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          // Add server_sale_id column to sales table
+          await db.execute('''
+            ALTER TABLE ${AppTables.sales} ADD COLUMN server_sale_id TEXT UNIQUE
+          ''');
+        }
+      },
       onCreate: (db, version) async {
         // Create tables
         await db.execute('''
@@ -65,6 +83,7 @@ class DatabaseService {
             total_amount REAL NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             synced INTEGER NOT NULL DEFAULT 0,
+            server_sale_id TEXT UNIQUE,
             FOREIGN KEY (outlet_id) REFERENCES ${AppTables.outlets} (id),
             FOREIGN KEY (rep_id) REFERENCES ${AppTables.profiles} (id),
             FOREIGN KEY (customer_id) REFERENCES customers (id)
@@ -93,4 +112,6 @@ class DatabaseService {
     await db.close();
     _database = null;
   }
+
+
 }

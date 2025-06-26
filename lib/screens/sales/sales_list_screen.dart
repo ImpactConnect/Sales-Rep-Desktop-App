@@ -88,6 +88,8 @@ class _SalesListScreenState extends State<SalesListScreen> {
     });
   }
 
+
+
   Future<void> _loadUserProfileAndSales() async {
     setState(() => _isLoading = true);
     try {
@@ -99,14 +101,16 @@ class _SalesListScreenState extends State<SalesListScreen> {
       final sales = await _salesService.getAllSales();
       final syncedSales = sales.where((s) => s.synced).toList();
       final unsyncedSales = sales.where((s) => !s.synced).toList();
-      
+
       setState(() {
         _sales = sales.cast<Sale>();
         _filteredSales = _sales; // Initialize filtered sales with all sales
         _syncedCount = syncedSales.length;
         _unsyncedCount = unsyncedSales.length;
-        _lastSyncDate = syncedSales.isNotEmpty 
-            ? syncedSales.map((s) => s.createdAt).reduce((a, b) => a.isAfter(b) ? a : b)
+        _lastSyncDate = syncedSales.isNotEmpty
+            ? syncedSales
+                .map((s) => s.createdAt)
+                .reduce((a, b) => a.isAfter(b) ? a : b)
             : null;
         _applyFilters(); // Apply any existing filters
       });
@@ -116,6 +120,53 @@ class _SalesListScreenState extends State<SalesListScreen> {
       );
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _resetDatabase() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Database'),
+        content: const Text('This will delete all local data. Are you sure?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      try {
+        await _salesService.resetDatabase();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Database reset successfully')),
+          );
+          await _loadUserProfileAndSales(); // Refresh the data
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error resetting database: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
     }
   }
 
@@ -133,7 +184,9 @@ class _SalesListScreenState extends State<SalesListScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -193,14 +246,18 @@ class _SalesListScreenState extends State<SalesListScreen> {
             const SizedBox(width: 4),
             Text(
               value,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+              style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.bold, color: color),
             ),
           ],
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+          style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -946,18 +1003,72 @@ class _SalesListScreenState extends State<SalesListScreen> {
               ],
             ),
           ),
-          ElevatedButton.icon(
-            onPressed: () {
-              // Sync functionality will be added later
-            },
-            icon: const Icon(Icons.sync, size: 18),
-            label: const Text('Sync Now'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              textStyle: const TextStyle(fontSize: 13),
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Colors.white,
-            ),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: _isLoading ? null : () async {
+                  setState(() => _isLoading = true);
+                  try {
+                    final result = await _salesService.syncAllPendingSales();
+                    if (mounted) {
+                      if (result.isFullSuccess) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Successfully synced ${result.successCount} sales')),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Synced ${result.successCount} sales, ${result.failureCount} failed'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                      await _loadUserProfileAndSales(); // Refresh the sales list
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Sync failed: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  } finally {
+                    if (mounted) {
+                      setState(() => _isLoading = false);
+                    }
+                  }
+                },
+                icon: _isLoading
+                    ? Container(
+                        width: 18,
+                        height: 18,
+                        child: const CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.sync, size: 18),
+                label: Text(_isLoading ? 'Syncing...' : 'Sync Now'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  textStyle: const TextStyle(fontSize: 13),
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _isLoading ? null : _resetDatabase,
+                icon: const Icon(Icons.refresh, size: 18),
+                tooltip: 'Reset Database',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.red[100],
+                  foregroundColor: Colors.red,
+                ),
+              ),
+            ],
           ),
         ],
       ),

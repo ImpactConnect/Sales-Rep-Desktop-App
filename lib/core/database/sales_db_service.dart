@@ -86,14 +86,21 @@ class SalesDbService {
     return sales;
   }
 
-  Future<void> markSaleAsSynced(String saleId) async {
+  Future<void> markSaleAsSynced(String saleId, String serverSaleId) async {
     final db = await _databaseService.database;
     await db.update(
       AppTables.sales,
-      {'synced': 1},
+      {
+        'synced': 1,
+        'server_sale_id': serverSaleId,
+      },
       where: 'id = ?',
       whereArgs: [saleId],
     );
+  }
+
+  Future<void> resetDatabase() async {
+    await _databaseService.deleteDatabase();
   }
 
   Future<List<Sale>> getSalesByDateRange(DateTime start, DateTime end) async {
